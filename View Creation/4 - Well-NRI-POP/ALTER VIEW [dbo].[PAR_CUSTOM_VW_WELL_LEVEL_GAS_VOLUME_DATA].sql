@@ -1,0 +1,59 @@
+USE [QAS_PRD_PAR_CUSTOM]
+GO
+
+/****** Object:  View [dbo].[PAR_CUSTOM_VW_WELL_LEVEL_GAS_VOLUME_DATA]    Script Date: 8/22/2019 9:59:45 AM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+ALTER VIEW [dbo].[PAR_CUSTOM_VW_WELL_LEVEL_GAS_VOLUME_DATA] AS 
+
+SELECT F.PROP_NO, 
+       F.PRDN_DT, 
+       Sum(ACT_MCF_VOL)            [RESIDUE_VOL], 
+       Sum(ACT_BBL_VOL)            [NGL VOLUME], 
+       Sum(PLNT_INLET_MKT_SHR_VOL) AS WELLHEAD_VOL, 
+       Max(POP)               AS POP, 
+       CASE 
+         WHEN Sum(PLNT_INLET_MKT_SHR_VOL) IS NULL 
+               OR Max(PLNT_INLET_MKT_SHR_VOL) = 0 THEN 0 
+         ELSE Sum(ACT_MCF_VOL) / Sum(PLNT_INLET_MKT_SHR_VOL) 
+       END                         AS [SHRINK_FACTOR], 
+       CASE 
+         WHEN Sum(PLNT_INLET_MKT_SHR_VOL) IS NULL 
+               OR Max(PLNT_INLET_MKT_SHR_VOL) = 0 THEN 0 
+         ELSE Sum(ACT_BBL_VOL) / ( Sum(PLNT_INLET_MKT_SHR_VOL) / 6 ) 
+       END                         AS [YIELD_FACTOR], 
+	    CASE 
+         WHEN Sum(PLNT_INLET_MKT_SHR_VOL) IS NULL 
+               OR Max(PLNT_INLET_MKT_SHR_VOL) = 0 THEN 0 
+         ELSE (Sum(ACT_BBL_VOL)*1000) / ( Sum(PLNT_INLET_MKT_SHR_VOL)) 
+       END                         AS [YIELD / BBL] 
+FROM   PAR_UPS16_QRA.dbo.TONL_TAX_INPUT F 
+LEFT JOIN (SELECT DISTINCT
+CASE WHEN STD_PRES > 1 THEN STD_PRES/100 ELSE STD_PRES END POP, 
+RMITR_NO, 
+RMITR_SUB, 
+PRDN_DT,
+MANL_INPUT_ID AS PROP_NO
+FROM  PAR_UPS16_QRA.dbo.RONL_MANL_INPUT WHERE PROD_CD = '400') POP
+ON POP.PROP_NO = F.PROP_NO
+AND POP.RMITR_NO = F.PURCH_BA_NO
+AND POP.RMITR_SUB = F.PURCH_BA_SUB
+AND POP.PRDN_DT = F.PRDN_DT
+WHERE  MAJ_PROD_CD IN ( '200', '400' ) 
+       AND SEV_TAX_TYPE_CD = 'PR' 
+       AND F.PRDN_DT = (SELECT PAR_GAS_MONTH 
+                      FROM   [PAR_GAS_MONTH]) 
+       AND F.PROP_NO IN (SELECT PROP_NO 
+                       FROM   PAR_UPS16_QRA.dbo.GONL_PROP 
+                       WHERE  PROP_OPER_FL = 'Y') 
+GROUP  BY F.PROP_NO, 
+          F.PRDN_DT 
+
+GO
+
+
